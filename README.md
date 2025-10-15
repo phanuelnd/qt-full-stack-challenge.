@@ -35,3 +35,6 @@ Use npm for all commands. pnpm should be used only if you fully understand its s
 ## Scripts
 - Backend: `npm run start:dev`, `npm run build`, `npm run test`
 - Frontend: `npm run dev`, `npm run build`, `npm run start`
+
+## Screenshot
+![Simple Dashboard](./Simpledashboard.png)
