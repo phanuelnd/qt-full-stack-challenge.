@@ -11,8 +11,12 @@ import {
   HttpStatus,
   Logger,
   ValidationPipe,
+  Res,
+  Header,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { UsersService } from './users.service';
+import { ProtobufService } from '../protobuf/protobuf.service';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -46,7 +50,10 @@ import {
 export class UsersController {
   private readonly logger = new Logger(UsersController.name);
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly protobufService: ProtobufService,
+  ) {}
 
   /**
    * GET /users
@@ -165,20 +172,42 @@ export class UsersController {
   /**
    * GET /users/export
    * 
-   * Export users data (placeholder for protobuf implementation).
-   * This endpoint will be implemented in the next phase to provide
-   * protobuf-serialized user data with digital signature verification.
+   * Export users data in Protocol Buffers format.
+   * Returns binary protobuf data containing all users with their
+   * cryptographic security fields for frontend verification.
    * 
-   * @returns Placeholder response
+   * @param res - Express response object for binary data
+   * @returns Binary protobuf data with application/octet-stream content type
    */
   @Get('export')
-  async exportUsers(): Promise<{ message: string; status: string }> {
-    this.logger.log('User export requested (placeholder)');
+  @Header('Content-Type', 'application/octet-stream')
+  @Header('Content-Disposition', 'attachment; filename="users_export.pb"')
+  async exportUsers(@Res() res: Response): Promise<void> {
+    this.logger.log('User export requested (protobuf format)');
     
-    return {
-      message: 'User export endpoint - protobuf implementation coming soon',
-      status: 'placeholder',
-    };
+    try {
+      // Get all users from the database
+      const users = await this.usersService.findAll();
+      
+      // Encode users to protobuf binary format
+      const protobufData = await this.protobufService.encodeUsers(users);
+      
+      // Set response headers
+      res.setHeader('Content-Length', protobufData.length);
+      res.setHeader('X-Total-Count', users.length.toString());
+      res.setHeader('X-Export-Date', new Date().toISOString());
+      
+      // Send binary data
+      res.send(protobufData);
+      
+      this.logger.log(`Exported ${users.length} users in protobuf format`);
+    } catch (error) {
+      this.logger.error('Failed to export users:', error);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        message: 'Export failed',
+        error: 'Internal server error',
+      });
+    }
   }
 
   /**

@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package userdashboard;
+
+// User message definition for Protocol Buffers serialization
+// Contains all user data including cryptographic security fields
+message User {
+  // Primary key - auto-incrementing integer
+  int32 id = 1;
+  
+  // User's email address (must be unique)
+  string email = 2;
+  
+  // User's role in the system (admin or user)
+  string role = 3;
+  
+  // Current status of the user account (active or inactive)
+  string status = 4;
+  
+  // Timestamp when the user was created (ISO 8601 format)
+  string createdAt = 5;
+  
+  // SHA-384 hash of the user's email address for privacy protection
+  string emailHash = 6;
+  
+  // Digital signature of the emailHash for integrity verification
+  string signature = 7;
+}
+
+// Collection of users for export
+message UsersExport {
+  // Array of user messages
+  repeated User users = 1;
+  
+  // Export metadata
+  string exportedAt = 2;
+  int32 totalCount = 3;
+}

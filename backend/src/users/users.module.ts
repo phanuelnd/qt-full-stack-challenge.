@@ -4,6 +4,7 @@ import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { CryptoModule } from '../crypto/crypto.module';
+import { ProtobufModule } from '../protobuf/protobuf.module';
 
 /**
  * UsersModule
@@ -18,6 +19,7 @@ import { CryptoModule } from '../crypto/crypto.module';
   imports: [
     TypeOrmModule.forFeature([User]),
     CryptoModule,
+    ProtobufModule,
   ],
   controllers: [UsersController],
   providers: [UsersService],

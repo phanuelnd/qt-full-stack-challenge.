@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package users;
+
+// Defines a single user record
+message User {
+  int32 id = 1;
+  string email = 2;
+  string role = 3;
+  string status = 4;
+  string createdAt = 5;
+  string emailHash = 6;
+  string signature = 7;
+}
+
+// Defines a wrapper for user export
+message UsersExport {
+  repeated User users = 1;
+  int32 totalCount = 2;
+  string exportedAt = 3;
+}
