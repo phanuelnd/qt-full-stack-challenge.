@@ -31,9 +31,9 @@ import { User } from './users/entities/user.entity';
     // Database configuration with TypeORM and SQLite
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: 'database.sqlite',
+      database: 'data/database.sqlite',
       entities: [User],
-      synchronize: true, // Auto-create tables (use migrations in production)
+      synchronize: true, // Auto-create tables
       logging: true, // Set to true for SQL query logging
     }),
     

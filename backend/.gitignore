@@ -52,5 +52,14 @@ pids
 *.seed
 *.pid.lock
 
+# SQLite databases
+/data/*.sqlite
+/data/*.sqlite-journal
+/data/*.db
+/data/*.db-journal
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+decode_users.js
+users_export.pb
+/backend/decode_users.js
