@@ -1,0 +1,376 @@
+## Project Overview
+Build a full-stack admin panel with user CRUD, protobuf serialization, digital signatures, and analytics chart.
+
+**Stack:** NestJS (backend) + Next.js 14+ App Router (frontend)
+
+---
+
+## Code Quality Standards (CRITICAL)
+- **Senior-level code only**: Clean, DRY, well-structured, properly typed
+- **No repetition**: Use loops, maps, arrays, reusable functions/components
+- **Well-commented**: Document complex logic, crypto operations, proto usage
+- **Proper architecture**: Services, DTOs, modules, proper separation of concerns
+- **TypeScript strict mode**: Full type safety everywhere
+- **Error handling**: Comprehensive try-catch, validation, meaningful errors
+
+---
+
+## Backend Requirements (NestJS)
+
+### 1. Project Setup
+```bash
+# Structure
+backend/
+├── src/
+│   ├── users/
+│   │   ├── users.controller.ts
+│   │   ├── users.service.ts
+│   │   ├── users.module.ts
+│   │   ├── dto/
+│   │   ├── entities/
+│   │   └── proto/
+│   ├── crypto/
+│   │   ├── crypto.service.ts
+│   │   └── crypto.module.ts
+│   ├── database/
+│   └── main.ts
+├── keys/              # RSA/ECDSA keypair storage
+├── proto/
+│   └── user.proto
+└── db.sqlite
+```
+
+### 2. Dependencies to Install
+```json
+{
+  "@nestjs/common": "^10.x",
+  "@nestjs/typeorm": "^10.x",
+  "typeorm": "^0.3.x",
+  "sqlite3": "^5.x",
+  "protobufjs": "^7.x",
+  "class-validator": "^0.14.x",
+  "class-transformer": "^0.5.x"
+}
+```
+
+### 3. User Entity (TypeORM + SQLite)
+```typescript
+// User fields (MANDATORY)
+- id: number (primary key, auto-increment)
+- email: string (unique)
+- role: enum ('admin' | 'user')
+- status: enum ('active' | 'inactive')
+- createdAt: Date
+- emailHash: string (SHA-384 hash of email)
+- signature: string (digital signature of emailHash)
+```
+
+### 4. Protobuf Schema (user.proto)
+```protobuf
+syntax = "proto3";
+
+package user;
+
+message User {
+  int32 id = 1;
+  string email = 2;
+  string role = 3;
+  string status = 4;
+  string createdAt = 5;
+  string emailHash = 6;
+  string signature = 7;
+}
+
+message UserList {
+  repeated User users = 1;
+  string publicKey = 2;  // Include public key for frontend verification
+}
+```
+
+**CRITICAL:** Use `protobufjs` to compile and encode/decode.
+
+### 5. Crypto Service (crypto.service.ts)
+**Generate RSA/ECDSA/EdDSA keypair on app startup:**
+- Store keys in `keys/private.pem` and `keys/public.pem`
+- Use Node.js `crypto` module (no external libs needed)
+- Implement:
+  - `hashEmail(email: string): string` → SHA-384 hash
+  - `signHash(hash: string): string` → Digital signature (base64)
+  - `getPublicKey(): string` → Return public key for frontend
+
+**Example:**
+```typescript
+import { createHash, createSign, generateKeyPairSync } from 'crypto';
+
+// Generate keypair (RSA 2048 or ECDSA secp256k1 or EdDSA ed25519)
+// Hash with SHA-384
+// Sign with private key
+// Return base64 signature
+```
+
+### 6. Users Service (users.service.ts)
+Implement:
+- `create(createUserDto)` → Hash email, sign hash, save user
+- `findAll()` → Return all users
+- `findOne(id)` → Return single user
+- `update(id, updateUserDto)` → Update user (re-sign if email changes)
+- `remove(id)` → Soft/hard delete user
+- `getUsersCreatedPerDay()` → Aggregate users by date (last 7 days)
+- `exportUsersProtobuf()` → Serialize all users to protobuf binary
+
+### 7. API Endpoints (users.controller.ts)
+```typescript
+POST   /users              → Create user
+GET    /users              → List all users
+GET    /users/:id          → Get single user
+PATCH  /users/:id          → Update user
+DELETE /users/:id          → Delete user
+GET    /users/stats/chart  → Return {date, count}[] for last 7 days
+GET    /users/export       → Return protobuf binary (Content-Type: application/octet-stream)
+GET    /crypto/public-key  → Return public key (for frontend verification)
+```
+
+**CRITICAL:** `/users/export` MUST return protobuf-encoded binary with `UserList` message including public key.
+
+### 8. CORS & Validation
+- Enable CORS for `http://localhost:3000`
+- Use `class-validator` pipes globally
+- Validate all DTOs (email format, role enum, status enum)
+
+---
+
+## Frontend Requirements (Next.js 14+)
+
+### 1. Project Setup
+```bash
+# Structure
+frontend/
+├── app/
+│   ├── page.tsx           # Dashboard with table & chart
+│   ├── layout.tsx
+│   └── api/               # Optional API routes
+├── components/
+│   ├── UserTable.tsx      # Table with signature verification
+│   ├── UserChart.tsx      # Chart.js/Recharts line chart
+│   ├── UserForm.tsx       # Create/edit user modal/form
+│   └── ui/                # Reusable UI components
+├── lib/
+│   ├── proto.ts           # Protobuf decode logic
+│   ├── crypto.ts          # Signature verification logic
+│   └── api.ts             # API client (fetch/axios)
+├── proto/
+│   └── user.proto         # Copy from backend
+└── public/
+```
+
+### 2. Dependencies to Install
+```json
+{
+  "next": "^14.x",
+  "react": "^18.x",
+  "protobufjs": "^7.x",
+  "chart.js": "^4.x",
+  "react-chartjs-2": "^5.x",
+  "tailwindcss": "^3.x"
+}
+```
+
+### 3. User Table Component (CRITICAL)
+**Must:**
+1. Fetch `/users/export` (protobuf binary)
+2. Decode protobuf using `protobufjs`
+3. Get public key from decoded data
+4. **Verify signature for EACH user** using Web Crypto API
+5. **Only display users with valid signatures**
+6. Show columns: ID, Email, Role, Status, Created At, Signature Status (✓/✗)
+
+**Signature Verification (crypto.ts):**
+```typescript
+// Use Web Crypto API
+async function verifySignature(
+  emailHash: string,
+  signature: string,
+  publicKeyPem: string
+): Promise<boolean> {
+  // Import public key
+  // Verify signature of emailHash
+  // Return true/false
+}
+```
+
+### 4. User Chart Component
+- Use `Chart.js` or `Recharts`
+- Fetch `/users/stats/chart` → `[{date: '2025-10-09', count: 5}, ...]`
+- Display line/bar chart showing users created per day (last 7 days)
+- X-axis: dates, Y-axis: count
+
+### 5. User Form Component
+- Create/edit user form with validation
+- Fields: email (required, email format), role (select), status (select)
+- POST to `/users` or PATCH to `/users/:id`
+- Show success/error messages
+
+### 6. Dashboard Page (app/page.tsx)
+Layout:
+```
+┌────────────────────────────────────┐
+│  Users Created (Last 7 Days)       │
+│  [Chart Component]                 │
+├────────────────────────────────────┤
+│  User Management                   │
+│  [Create User Button]              │
+│  [User Table with verification]    │
+└────────────────────────────────────┘
+```
+
+### 7. API Client (lib/api.ts)
+Create reusable fetch functions:
+- `fetchUsers()` → GET /users
+- `fetchUsersProtobuf()` → GET /users/export (arraybuffer)
+- `fetchUserStats()` → GET /users/stats/chart
+- `fetchPublicKey()` → GET /crypto/public-key
+- `createUser(data)` → POST /users
+- `updateUser(id, data)` → PATCH /users/:id
+- `deleteUser(id)` → DELETE /users/:id
+
+---
+
+## Implementation Order
+
+### Phase 1: Backend Core
+1. Initialize NestJS project with TypeORM + SQLite
+2. Create User entity with all required fields
+3. Generate RSA/ECDSA keypair in CryptoService
+4. Implement hash + sign in CryptoService
+5. Create UsersService with CRUD methods
+6. Create UsersController with all endpoints
+7. Test all endpoints with Postman/Thunder Client
+
+### Phase 2: Protobuf Implementation
+1. Write user.proto schema
+2. Load proto in backend, implement `/users/export` endpoint
+3. Test protobuf encoding (should return binary data)
+4. Verify Content-Type is `application/octet-stream`
+
+### Phase 3: Frontend Core
+1. Initialize Next.js 14+ with App Router + Tailwind
+2. Copy user.proto to frontend
+3. Create API client functions
+4. Build UserTable component (fetch JSON first, then replace with protobuf)
+5. Build UserForm component for CRUD
+6. Build UserChart component
+
+### Phase 4: Crypto Integration
+1. Implement signature verification in frontend (lib/crypto.ts)
+2. Update UserTable to decode protobuf and verify signatures
+3. Filter out users with invalid signatures
+4. Show verification status in table
+
+### Phase 5: Polish
+1. Add loading states, error handling
+2. Add confirmation dialogs for delete
+3. Improve UI/UX with Tailwind
+4. Write comprehensive README.md
+
+---
+
+## README.md Template
+
+```markdown
+# Admin Panel with Protobuf & Digital Signatures
+
+## Tech Stack
+- **Backend:** NestJS, TypeORM, SQLite, Protobuf
+- **Frontend:** Next.js 14 (App Router), React, Tailwind CSS
+- **Crypto:** RSA/ECDSA digital signatures, SHA-384 hashing
+
+## Setup & Run
+
+### Backend
+\`\`\`bash
+cd backend
+npm install
+npm run start:dev  # Runs on http://localhost:3001
+\`\`\`
+
+### Frontend
+\`\`\`bash
+cd frontend
+npm install
+npm run dev  # Runs on http://localhost:3000
+\`\`\`
+
+## Features
+✅ User CRUD (Create, Read, Update, Delete)
+✅ SQLite persistence
+✅ Protobuf serialization endpoint (/users/export)
+✅ Digital signatures (RSA/ECDSA) on user email hashes
+✅ Frontend signature verification (only valid users displayed)
+✅ Users created chart (last 7 days)
+
+## API Endpoints
+- `GET /users` - List all users
+- `POST /users` - Create user
+- `PATCH /users/:id` - Update user
+- `DELETE /users/:id` - Delete user
+- `GET /users/export` - Export users as protobuf binary
+- `GET /users/stats/chart` - Get user creation stats
+- `GET /crypto/public-key` - Get public key for verification
+
+## Notes
+- Keypair generated on first run (stored in backend/keys/)
+- SHA-384 used for email hashing
+- RSA-2048 used for digital signatures
+- Frontend verifies signatures using Web Crypto API
+- Users with invalid signatures are filtered out
+
+## Assumptions
+- Email is unique per user
+- Signature verification happens client-side
+- Chart shows last 7 days from current date
+```
+
+---
+
+## Testing Checklist
+
+### Backend
+- [ ] All CRUD endpoints work
+- [ ] Users saved to SQLite with all fields
+- [ ] Email hash generated correctly (SHA-384)
+- [ ] Signature generated on user creation
+- [ ] `/users/export` returns valid protobuf binary
+- [ ] Public key endpoint works
+- [ ] Stats endpoint returns correct aggregated data
+
+### Frontend
+- [ ] Protobuf binary fetches and decodes correctly
+- [ ] Signature verification works (valid signatures pass)
+- [ ] Table displays only users with valid signatures
+- [ ] Chart displays correctly with real data
+- [ ] Create user form works
+- [ ] Update user re-signs if email changes
+- [ ] Delete user works with confirmation
+
+### Integration
+- [ ] Frontend can decode backend's protobuf
+- [ ] Signature created in backend verifies in frontend
+- [ ] Public key transmitted correctly
+- [ ] CORS works between frontend and backend
+
+---
+
+## CRITICAL REMINDERS
+
+1. **PROTOBUF ENDPOINT IS MANDATORY** - Without `/users/export` returning valid protobuf, submission will be rejected
+2. **SIGNATURE VERIFICATION** - Frontend must verify signatures and filter invalid users
+3. **NO CODE REPETITION** - Use maps, loops, reusable functions
+4. **SENIOR-LEVEL CODE** - Proper TypeScript, error handling, architecture
+5. **ALL FIELDS REQUIRED** - id, email, role, status, createdAt, emailHash, signature
+6. **7-DAY CHART** - Must aggregate and display correctly
+
+---
+
+## Start Command for Cursor
+
+"Build this entire project following the mega prompt exactly. Start with backend, then protobuf, then frontend, then crypto integration. Create all files with proper structure, types, and comments. Ensure protobuf endpoint works perfectly before moving to frontend. Verify signatures on frontend before displaying users."
